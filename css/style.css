@@ -1,24 +1,301 @@
-*{box-sizing:border-box}
-body{margin:0;background:#090d14;color:#f4f7fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{width:min(760px,100%);margin:auto;padding:18px}
-.card{background:#141a23;border:1px solid #2a3443;border-radius:22px;padding:18px;margin-bottom:14px}
-h1{font-size:24px;margin:0}.sub{color:#9ca8b8;font-size:13px;margin-top:5px}
-.filebox{margin-top:18px;border:2px dashed #536176;border-radius:18px;padding:22px;text-align:center}
-.fileinput{width:100%;padding:16px 8px;border-radius:14px;background:#0d131c;color:#fff;border:1px solid #344154;font-size:16px}
-.fileinput::file-selector-button{border:0;border-radius:10px;background:#7d5cff;color:#fff;padding:11px 14px;margin-right:10px;font-weight:700}
-.previewWrap{margin:18px auto 8px;width:min(320px,82vw);height:min(320px,82vw);display:flex;align-items:center;justify-content:center;border-radius:16px;background:repeating-conic-gradient(#303846 0 25%,#202733 0 50%) 50%/20px 20px;overflow:hidden}
-.previewWrap img{max-width:100%;max-height:100%;object-fit:contain}
-.hidden{display:none}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-label{font-size:13px;color:#b8c2d0}select{display:block;width:100%;margin-top:6px;background:#0d131c;color:#fff;border:1px solid #344154;border-radius:11px;padding:11px}
-button{width:100%;margin-top:14px;border:0;border-radius:13px;padding:14px;background:#7d5cff;color:#fff;font-size:15px;font-weight:800}
-button:disabled{opacity:.45}.status{margin:14px 0 0;color:#aeb8c7;font-size:13px;line-height:1.45}
-.ok{color:#72e0a3}.err{color:#ff7f8a}.warn{color:#ffd166}
-.download{display:block;text-align:center;text-decoration:none;color:#fff;background:#238636;border-radius:13px;padding:14px;margin-top:12px;font-weight:800}
-.progress{height:8px;background:#252d39;border-radius:10px;overflow:hidden;margin-top:12px}.progress>i{display:block;height:100%;width:0;background:#7d5cff}
-.info{color:#9ca8b8;font-size:13px;line-height:1.55}code{color:#fff}
+:root {
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-color: #f8fafc;
+    --text-muted: #94a3b8;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --success: #22c55e;
+    --success-hover: #16a34a;
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --border: #334155;
+}
 
-.pickbtn{display:block;width:100%;padding:16px;border-radius:13px;background:#7d5cff;color:#fff;font-size:16px;font-weight:800;text-align:center;cursor:pointer}
-.fileinput{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.filebox:focus-within{border-color:#7d5cff}
-.previewWrap{position:relative}
-.previewWrap:after{content:"GIF PREVIEW";position:absolute;left:10px;top:10px;background:#111a;color:#fff;padding:5px 9px;border-radius:8px;font-size:11px;font-weight:800}
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.5;
+    padding: 1rem;
+}
+
+.app-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
+    color: #60a5fa;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.privacy-badge {
+    display: inline-block;
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    color: #e2e8f0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+}
+
+.upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    background: rgba(15, 23, 42, 0.3);
+}
+
+.drag-text {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+}
+
+.btn {
+    display: inline-block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    font-weight: bold;
+    text-align: center;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+    text-decoration: none;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.primary-btn {
+    background-color: var(--primary);
+    color: white;
+}
+.primary-btn:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+}
+
+.success-btn {
+    background-color: var(--success);
+    color: white;
+    margin-bottom: 0.75rem;
+}
+.success-btn:hover:not(:disabled) {
+    background-color: var(--success-hover);
+}
+
+.danger-btn {
+    background-color: var(--danger);
+    color: white;
+}
+.danger-btn:hover:not(:disabled) {
+    background-color: var(--danger-hover);
+}
+
+.download-btn {
+    background-color: #8b5cf6;
+    color: white;
+}
+.download-btn:hover {
+    background-color: #7c3aed;
+}
+
+.file-info {
+    background: rgba(15, 23, 42, 0.5);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.file-info h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: #cbd5e1;
+}
+
+.file-info ul {
+    list-style: none;
+}
+
+.file-info li {
+    margin-bottom: 0.25rem;
+    color: var(--text-muted);
+}
+
+.file-info strong {
+    color: var(--text-color);
+}
+
+.settings-group {
+    margin-bottom: 1rem;
+}
+
+.settings-group label {
+    display: block;
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+    color: var(--text-muted);
+}
+
+.settings-group select {
+    width: 100%;
+    padding: 0.6rem;
+    background: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.action-buttons {
+    margin-top: 1.5rem;
+}
+
+.preview-container {
+    width: 100%;
+    height: 250px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    position: relative;
+}
+
+.checkerboard {
+    background-image: linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+                      linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+                      linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+                      linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    background-color: #0f172a;
+}
+
+.preview-container img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.placeholder-text {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.status-box {
+    background: rgba(15, 23, 42, 0.5);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    min-height: 80px;
+}
+
+#statusText {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+.progress-bar-container {
+    width: 100%;
+    background: var(--border);
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    width: 0%;
+    height: 100%;
+    background: var(--primary);
+    transition: width 0.2s;
+}
+
+.validation-box {
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    text-align: center;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+}
+
+.validation-box.passed {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.validation-box.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.hidden {
+    display: none !important;
+}
+
+footer {
+    text-align: center;
+    margin-top: 2rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}

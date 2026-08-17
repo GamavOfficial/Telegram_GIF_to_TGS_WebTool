@@ -3,9 +3,9 @@ class WebmEncoder {
         onProgress(20, 'Preparing video conversion pipeline...');
         await new Promise(r => setTimeout(r, 200));
 
-        // 1. Create a canvas for rendering frames
+        // 1. Create a canvas for rendering frames (Telegram 512x512 standard)
         const canvas = document.createElement('canvas');
-        canvas.width = 512;  // Telegram sticker requirement
+        canvas.width = 512;
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
@@ -26,7 +26,7 @@ class WebmEncoder {
         }
 
         const stream = canvas.captureStream(30); // 30 FPS
-        const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerRate: 1000000 });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1000000 });
         
         const chunks = [];
         mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
@@ -48,13 +48,14 @@ class WebmEncoder {
 
             mediaRecorder.start();
 
-            // Draw frames to canvas in a loop to record the animation
+            // Draw frames smoothly using requestAnimationFrame to prevent freezing
             let frameCount = 0;
-            const maxFrames = 90; // ~3 seconds animation
-            const interval = setInterval(() => {
+            const maxFrames = 90; // ~3 seconds animation at 30fps
+
+            const renderFrame = () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                // Draw GIF image onto the center of 512x512 canvas maintaining aspect ratio
+                // Draw GIF image onto the center maintaining aspect ratio
                 const hRatio = canvas.width / img.width;
                 const vRatio = canvas.height / img.height;
                 const ratio = Math.min(hRatio, vRatio);
@@ -66,11 +67,16 @@ class WebmEncoder {
                 frameCount++;
                 onProgress(40 + Math.floor((frameCount / maxFrames) * 50), `Processing frame ${frameCount}/${maxFrames}...`);
 
-                if (frameCount >= maxFrames) {
-                    clearInterval(interval);
-                    mediaRecorder.stop();
+                if (frameCount < maxFrames) {
+                    requestAnimationFrame(renderFrame);
+                } else {
+                    setTimeout(() => {
+                        mediaRecorder.stop();
+                    }, 100);
                 }
-            }, 1000 / 30);
+            };
+
+            requestAnimationFrame(renderFrame);
         });
     }
 }

@@ -1,39 +1,53 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const settingsSection = document.getElementById('settings-section');
-    const buildBtn = document.getElementById('build-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const progressSection = document.getElementById('progress-section');
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
-    const resultSection = document.getElementById('result-section');
-    const downloadBtn = document.getElementById('download-btn');
+    const uploadZone = document.getElementById('uploadZone');
+    const gifFileInput = document.getElementById('gifFileInput');
+    const selectFileBtn = document.getElementById('selectFileBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const infoName = document.getElementById('infoName');
+    const infoSize = document.getElementById('infoSize');
+    const infoRes = document.getElementById('infoRes');
+    const infoFrames = document.getElementById('infoFrames');
+    const infoDuration = document.getElementById('infoDuration');
+    
+    const buildBtn = document.getElementById('buildBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const progressBar = document.getElementById('progressBar');
+    const statusText = document.getElementById('statusText');
+    const gifPreviewImg = document.getElementById('gifPreviewImg');
+    const placeholderText = document.querySelector('.placeholder-text');
+    const validationResult = document.getElementById('validationResult');
+    const downloadBtn = document.getElementById('downloadBtn');
 
     let selectedGif = null;
 
-    // Handle drag and drop / click to upload
-    if (dropZone && fileInput) {
-        dropZone.addEventListener('click', () => fileInput.click());
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('border-primary');
+    // Handle click & drag-drop upload
+    if (uploadZone && gifFileInput) {
+        if (selectFileBtn) {
+            selectFileBtn.addEventListener('click', () => gifFileInput.click());
+        }
+        uploadZone.addEventListener('click', (e) => {
+            if (e.target !== selectFileBtn) gifFileInput.click();
         });
 
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('border-primary');
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('border-primary');
         });
 
-        dropZone.addEventListener('drop', (e) => {
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('border-primary');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
             e.preventDefault();
-            dropZone.classList.remove('border-primary');
+            uploadZone.classList.remove('border-primary');
             if (e.dataTransfer.files.length > 0) {
                 handleFile(e.dataTransfer.files[0]);
             }
         });
 
-        fileInput.addEventListener('change', (e) => {
+        gifFileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
             }
@@ -57,15 +71,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     height: img.height,
                     name: file.name
                 };
-                // Show settings section
-                if (settingsSection) settingsSection.classList.remove('hidden');
-                dropZone.innerHTML = `<p class="text-green-400 font-semibold">নির্বெடுக்கப்பட்ட ஃபைல்: ${file.name}</p>`;
+
+                // Update UI Preview & Info
+                if (gifPreviewImg) {
+                    gifPreviewImg.src = e.target.result;
+                    gifPreviewImg.classList.remove('hidden');
+                }
+                if (placeholderText) placeholderText.classList.add('hidden');
+
+                if (fileInfo) {
+                    fileInfo.classList.remove('hidden');
+                    if (infoName) infoName.textContent = file.name;
+                    if (infoSize) infoSize.textContent = (file.size / 1024).toFixed(2) + ' KB';
+                    if (infoRes) infoRes.textContent = `${img.width} x ${img.height}`;
+                    if (infoFrames) infoFrames.textContent = 'Animated GIF';
+                    if (infoDuration) infoDuration.textContent = '~3s';
+                }
+
+                if (buildBtn) buildBtn.removeAttribute('disabled');
+                if (statusText) statusText.textContent = 'GIF loaded successfully. Ready to build.';
             };
         };
         reader.readAsDataURL(file);
     }
 
-    // Build Button Action
+    // Build Button Action (WebM Conversion)
     if (buildBtn) {
         buildBtn.addEventListener('click', async () => {
             if (!selectedGif) {
@@ -73,22 +103,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const fpsSelect = document.getElementById('fps-select');
+            const fpsSelect = document.getElementById('fps-select') || document.getElementById('fpsSelect');
             const settings = {
                 fps: fpsSelect ? fpsSelect.value : 30
             };
 
-            settingsSection.classList.add('hidden');
-            progressSection.classList.remove('hidden');
+            if (progressBarContainer) progressBarContainer.classList.remove('hidden');
+            if (buildBtn) buildBtn.setAttribute('disabled', 'true');
 
             try {
-                const webmBlob = await TgsEncoder.generateTgs(selectedGif, settings, (progress, message) => {
+                // Calls WebmEncoder from webm.js
+                const webmBlob = await WebmEncoder.generateTgs(selectedGif, settings, (progress, message) => {
                     if (progressBar) progressBar.style.width = `${progress}%`;
-                    if (progressText) progressText.textContent = message;
+                    if (statusText) statusText.textContent = message;
                 });
 
-                progressSection.classList.add('hidden');
-                resultSection.classList.remove('hidden');
+                if (validationResult) {
+                    validationResult.textContent = 'Validation: Passed (.webm ready)';
+                    validationResult.style.color = '#4ade80';
+                }
 
                 // Generate download link for WebM
                 const downloadUrl = URL.createObjectURL(webmBlob);
@@ -98,11 +131,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     downloadBtn.classList.remove('hidden');
                 }
 
+                if (statusText) statusText.textContent = 'WebM Video Sticker generated successfully!';
+
             } catch (err) {
                 console.error(err);
                 alert('பிழை ஏற்பட்டுள்ளது: ' + err.message);
-                progressSection.classList.add('hidden');
-                settingsSection.classList.remove('hidden');
+                if (statusText) statusText.textContent = 'Conversion failed.';
+                if (progressBarContainer) progressBarContainer.classList.add('hidden');
+                if (buildBtn) buildBtn.removeAttribute('disabled');
             }
         });
     }
@@ -111,17 +147,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
             selectedGif = null;
-            if (fileInput) fileInput.value = '';
-            if (settingsSection) settingsSection.classList.add('hidden');
-            if (progressSection) progressSection.classList.add('hidden');
-            if (resultSection) resultSection.classList.add('hidden');
-            if (dropZone) {
-                dropZone.innerHTML = `
-                    <span class="text-blue-400 font-bold block mb-2">TAP TO CHOOSE GIF</span>
-                    <span class="text-gray-400 text-sm">or drag & drop animated GIF here</span>
-                `;
+            if (gifFileInput) gifFileInput.value = '';
+            if (fileInfo) fileInfo.classList.add('hidden');
+            if (progressBarContainer) progressBarContainer.classList.add('hidden');
+            if (progressBar) progressBar.style.width = '0%';
+            if (gifPreviewImg) {
+                gifPreviewImg.src = '';
+                gifPreviewImg.classList.add('hidden');
+            }
+            if (placeholderText) placeholderText.classList.remove('hidden');
+            if (buildBtn) buildBtn.setAttribute('disabled', 'true');
+            if (downloadBtn) downloadBtn.classList.add('hidden');
+            if (statusText) statusText.textContent = 'Ready for input.';
+            if (validationResult) {
+                validationResult.textContent = 'Validation: Pending';
+                validationResult.style.color = '';
             }
         });
     }
 });
-

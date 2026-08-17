@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn');
 
     let selectedGif = null;
+            parsedGif = null;
+    let parsedGif = null;
 
     // Handle click & drag-drop upload
     if (uploadZone && gifFileInput) {
@@ -54,45 +56,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function handleFile(file) {
-        if (!file.type.includes('gif')) {
+    async function handleFile(file) {
+        if (!file || (!file.type.includes('gif') && !/\.gif$/i.test(file.name))) {
             alert('தயவுசெய்து ஒரு சரியான GIF ஃபைலை மட்டும் தேர்ந்தெடுக்கவும்!');
             return;
         }
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
+        try {
+            const parsed = await GifParser.parse(file);
+            parsedGif = parsed;
+            const previewUrl = URL.createObjectURL(file);
             const img = new Image();
-            img.src = e.target.result;
             img.onload = () => {
-                selectedGif = {
-                    url: e.target.result,
-                    width: img.width,
-                    height: img.height,
-                    name: file.name
-                };
-
-                // Update UI Preview & Info
-                if (gifPreviewImg) {
-                    gifPreviewImg.src = e.target.result;
-                    gifPreviewImg.classList.remove('hidden');
-                }
+                selectedGif = { file, url: previewUrl, width: parsed.width, height: parsed.height, name: file.name };
+                if (gifPreviewImg) { gifPreviewImg.src = previewUrl; gifPreviewImg.classList.remove('hidden'); }
                 if (placeholderText) placeholderText.classList.add('hidden');
-
                 if (fileInfo) {
                     fileInfo.classList.remove('hidden');
                     if (infoName) infoName.textContent = file.name;
                     if (infoSize) infoSize.textContent = (file.size / 1024).toFixed(2) + ' KB';
-                    if (infoRes) infoRes.textContent = `${img.width} x ${img.height}`;
-                    if (infoFrames) infoFrames.textContent = 'Animated GIF';
-                    if (infoDuration) infoDuration.textContent = '~3s';
+                    if (infoRes) infoRes.textContent = `${parsed.width} x ${parsed.height}`;
+                    if (infoFrames) infoFrames.textContent = `${parsed.frameCount} frames`;
+                    if (infoDuration) infoDuration.textContent = `${(parsed.duration / 1000).toFixed(2)}s`;
                 }
-
                 if (buildBtn) buildBtn.removeAttribute('disabled');
-                if (statusText) statusText.textContent = 'GIF loaded successfully. Ready to build.';
+                if (statusText) statusText.textContent = 'GIF decoded successfully. Ready to build WebM.';
             };
-        };
-        reader.readAsDataURL(file);
+            img.onerror = () => { URL.revokeObjectURL(previewUrl); throw new Error('GIF preview could not be rendered.'); };
+            img.src = previewUrl;
+        } catch (err) {
+            parsedGif = null;
+            console.error(err);
+            alert('GIF error: ' + err.message);
+            if (statusText) statusText.textContent = 'GIF load failed.';
+        }
     }
 
     // Build Button Action (WebM Conversion)
@@ -113,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // Calls WebmEncoder from webm.js
-                const webmBlob = await WebmEncoder.generateTgs(selectedGif, settings, (progress, message) => {
+                const webmBlob = await WebmEncoder.generateWebm(parsedGif, { ...settings, maxFrames: document.getElementById('maxFramesSelect')?.value || 90 }, (progress, message) => {
                     if (progressBar) progressBar.style.width = `${progress}%`;
                     if (statusText) statusText.textContent = message;
                 });

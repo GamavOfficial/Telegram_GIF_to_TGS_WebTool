@@ -2,13 +2,38 @@
 "use strict";
 const $=id=>document.getElementById(id);let file=null,url=null;
 function msg(t,c=""){$("status").textContent=t;$("status").className="status "+c}
-$("gifFile").addEventListener("change",e=>{
- const f=e.target.files?.[0];if(!f)return;
- if(!/\.gif$/i.test(f.name)){msg("Please choose a GIF file.","err");return}
- file=f;if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(f);
- $("preview").src=url;$("previewWrap").classList.remove("hidden");$("build").disabled=false;
- $("fileInfo").textContent=f.name+" • "+(f.size/1024).toFixed(1)+" KB • GIF";
- msg("GIF selected successfully. TGS engine is ready.","ok");
+const picker=$("gifFile");
+picker.addEventListener("change",e=>{
+ const f=e.target && e.target.files ? e.target.files[0] : null;
+ if(!f){msg("No GIF selected.","warn");return}
+ if(f.type && f.type!=="image/gif" && !/\\.gif$/i.test(f.name)){
+   picker.value=""; msg("Please choose a GIF file.","err"); return;
+ }
+ if(!/\\.gif$/i.test(f.name)){
+   picker.value=""; msg("Please choose a file ending in .gif.","err"); return;
+ }
+ file=f;
+ if(url)URL.revokeObjectURL(url);
+ url=URL.createObjectURL(f);
+
+ const img=$("preview");
+ img.onload=()=>{
+   $("previewWrap").classList.remove("hidden");
+   $("build").disabled=false;
+   $("fileInfo").textContent=f.name+" • "+(f.size/1024).toFixed(1)+" KB • "+(f.type||"image/gif");
+   msg("GIF selected successfully. Preview is ready.","ok");
+ };
+ img.onerror=()=>{
+   $("previewWrap").classList.add("hidden");
+   $("build").disabled=false;
+   $("fileInfo").textContent=f.name+" • "+(f.size/1024).toFixed(1)+" KB • GIF";
+   msg("GIF selected, but the browser could not render the preview. You can still build it.","warn");
+ };
+ img.src=url;
+});
+
+$("gifFile").addEventListener("click",()=>{
+  msg("Opening Android file picker…");
 });
 $("reset").onclick=()=>location.reload();
 $("build").onclick=async()=>{

@@ -12,12 +12,12 @@ class Utils {
         if (typeof CompressionStream !== 'undefined') {
             const blob = new Blob([stringData], { type: 'application/json' });
             const stream = blob.stream().pipeThrough(new CompressionStream('gzip'));
-            return new Response(stream).blob();
+            const compressedBlob = await new Response(stream).blob();
+            
+            // FIX: Force binary octet-stream so Android Chrome doesn't append .txt
+            return new Blob([compressedBlob], { type: 'application/octet-stream' });
         } else {
-            // Fallback or simple array buffer mechanism if needed, 
-            // modern browsers support CompressionStream natively.
             throw new Error('Browser does not support CompressionStream');
         }
     }
 }
-

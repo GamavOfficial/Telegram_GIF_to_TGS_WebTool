@@ -1,91 +1,169 @@
+/* Telegram Video Sticker WebM encoder
+ * - VP9 first, VP8 fallback only when VP9 is unavailable
+ * - <= 3 seconds
+ * - <= 30 FPS
+ * - adaptive bitrate to stay <= 256 KiB
+ * - preserves the GIF's timeline instead of using maxFrames as a duration limiter
+ */
 class WebmEncoder {
     static getMimeType() {
         const candidates = [
             'video/webm;codecs=vp9',
-            'video/webm;codecs=vp8',
-            'video/webm'
+            'video/webm;codecs="vp9"'
         ];
-        return candidates.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+        if (!window.MediaRecorder) return '';
+        return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    }
+
+    static getBitratePlan(detail) {
+        if (detail === 'low') return [360000, 300000, 260000, 220000, 180000, 140000, 110000, 90000];
+        if (detail === 'high') return [650000, 550000, 480000, 400000, 320000, 260000, 220000, 180000, 140000, 110000, 90000];
+        return [560000, 480000, 420000, 360000, 300000, 250000, 210000, 170000, 130000, 100000];
     }
 
     static async generateWebm(gifData, settings, onProgress) {
-        if (!gifData || !gifData.frames?.length) throw new Error('No decoded GIF frames available.');
-        const fps = Math.max(1, Math.min(60, Number(settings.fps) || 30));
-        const maxFrames = Math.max(1, Math.min(180, Number(settings.maxFrames) || 90));
-        const durationMs = Math.min(3000, gifData.duration);
-        const frameTotal = Math.max(1, Math.min(maxFrames, Math.ceil(durationMs / 1000 * fps)));
+        if (!gifData || !gifData.frames?.length) {
+            throw new Error('No decoded GIF frames available.');
+        }
+
+        const fpsRequested = Math.max(1, Math.min(30, Number(settings.fps) || 30));
+        const originalDuration = Math.max(1, Number(gifData.duration) || 1);
+        const durationMs = Math.min(3000, originalDuration);
+        const maxFramesSetting = Math.max(1, Math.min(90, Number(settings.maxFrames) || 90));
+
+        // Never let the frame limit shorten the video. If fewer frames are requested,
+        // lower the actual FPS while keeping the complete timeline.
+        const idealFrames = Math.max(1, Math.round(durationMs / 1000 * fpsRequested));
+        const frameTotal = Math.min(90, idealFrames, maxFramesSetting);
+        const actualFps = Math.max(1, Math.min(30, frameTotal / (durationMs / 1000)));
+
         const canvas = document.createElement('canvas');
-        canvas.width = 512; canvas.height = 512;
-        const ctx = canvas.getContext('2d', { alpha: true, willReadFrequently: false });
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        if (!ctx) throw new Error('Canvas is not available.');
+
+        const source = document.createElement('canvas');
+        source.width = gifData.width;
+        source.height = gifData.height;
+        const sourceCtx = source.getContext('2d', { alpha: true });
+        if (!sourceCtx) throw new Error('Source canvas is not available.');
+
         const mimeType = this.getMimeType();
-        if (!mimeType) throw new Error('This browser cannot record WebM. Use current Chrome/Edge.');
-        const stream = canvas.captureStream(fps);
-        const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1500000 });
-        const chunks = [];
-        recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+        if (!mimeType) throw new Error('Your browser cannot encode WebM. Use current Chrome/Edge.');
 
-        // Build one composited RGBA canvas frame at a time from the decoded GIF.
-        const renderSource = document.createElement('canvas');
-        renderSource.width = gifData.width; renderSource.height = gifData.height;
-        const sourceCtx = renderSource.getContext('2d', { willReadFrequently: true });
-        let gifIndex = 0, elapsed = 0;
-        let previous = null;
-        const drawGifFrame = (f) => sourceCtx.putImageData(new ImageData(f.rgba, f.width, f.height), f.left, f.top);
-
-        const drawOutput = () => {
-            const scale = Math.min(512 / gifData.width, 512 / gifData.height);
-            const dw = gifData.width * scale, dh = gifData.height * scale;
+        const renderFrame = (frame) => {
+            sourceCtx.putImageData(new ImageData(frame.rgba, frame.width, frame.height), 0, 0);
             ctx.clearRect(0, 0, 512, 512);
-            ctx.drawImage(renderSource, (512 - dw) / 2, (512 - dh) / 2, dw, dh);
+            const scale = Math.min(512 / gifData.width, 512 / gifData.height);
+            const dw = Math.max(1, Math.round(gifData.width * scale));
+            const dh = Math.max(1, Math.round(gifData.height * scale));
+            ctx.drawImage(source, Math.round((512 - dw) / 2), Math.round((512 - dh) / 2), dw, dh);
         };
 
-        return new Promise((resolve, reject) => {
+        // Convert the already-composited GIF frames to a fixed output timeline.
+        const frameIndexes = [];
+        let timeline = 0;
+        let gifIndex = 0;
+        for (let i = 0; i < frameTotal; i++) {
+            const target = durationMs * (i / frameTotal);
+            while (gifIndex < gifData.frames.length - 1 && timeline + gifData.frames[gifIndex].delay <= target) {
+                timeline += gifData.frames[gifIndex].delay;
+                gifIndex++;
+            }
+            frameIndexes.push(gifIndex);
+        }
+
+        const recordOnce = (bitrate, attemptIndex, totalAttempts) => new Promise((resolve, reject) => {
+            const stream = canvas.captureStream(actualFps);
+            let recorder;
+            try {
+                recorder = new MediaRecorder(stream, {
+                    mimeType,
+                    videoBitsPerSecond: bitrate
+                });
+            } catch (error) {
+                stream.getTracks().forEach(track => track.stop());
+                reject(error);
+                return;
+            }
+
+            const chunks = [];
             let stopped = false;
-            const fail = e => { if (stopped) return; stopped = true; try { recorder.stop(); } catch {} reject(e instanceof Error ? e : new Error(String(e))); };
-            recorder.onerror = e => fail(new Error('WebM recorder error.'));
+            let frameNo = 0;
+            const start = performance.now();
+
+            const cleanup = () => stream.getTracks().forEach(track => track.stop());
+            const fail = error => {
+                if (stopped) return;
+                stopped = true;
+                cleanup();
+                try { recorder.stop(); } catch (_) {}
+                reject(error instanceof Error ? error : new Error(String(error)));
+            };
+
+            recorder.ondataavailable = event => {
+                if (event.data && event.data.size) chunks.push(event.data);
+            };
+            recorder.onerror = () => fail(new Error('WebM recorder error.'));
             recorder.onstop = () => {
-                if (stopped && chunks.length === 0) return;
+                if (stopped) return;
+                stopped = true;
+                cleanup();
                 const blob = new Blob(chunks, { type: 'video/webm' });
-                if (!blob.size) return reject(new Error('WebM output is empty.'));
-                onProgress(100, 'WEBM READY');
+                if (!blob.size) {
+                    reject(new Error('WebM output is empty.'));
+                    return;
+                }
                 resolve(blob);
             };
 
-            try {
-                recorder.start(1000);
-            } catch (e) { return fail(e); }
+            const stopAtEnd = () => {
+                if (stopped) return;
+                try { recorder.stop(); } catch (error) { fail(error); }
+            };
 
-            const start = performance.now();
-            let frameNo = 0;
             const tick = () => {
                 if (stopped) return;
-                const target = Math.min(durationMs, frameNo * (1000 / fps));
-                // Advance GIF frames to the frame that should be visible at this timestamp.
-                while (gifIndex < gifData.frames.length - 1 && elapsed + gifData.frames[gifIndex].delay <= target) {
-                    const f = gifData.frames[gifIndex];
-                    if (f.disposal === 3) previous = sourceCtx.getImageData(0, 0, gifData.width, gifData.height);
-                    drawGifFrame(f);
-                    elapsed += f.delay;
-                    if (f.disposal === 2) sourceCtx.clearRect(f.left, f.top, f.width, f.height);
-                    else if (f.disposal === 3 && previous) sourceCtx.putImageData(previous, 0, 0);
-                    gifIndex++;
+                if (frameNo < frameTotal) {
+                    renderFrame(gifData.frames[frameIndexes[frameNo]]);
+                    frameNo++;
+                    const progress = 5 + Math.round((frameNo / frameTotal) * 90);
+                    onProgress?.(progress, `Encoding ${attemptIndex}/${totalAttempts} • frame ${frameNo}/${frameTotal}`);
+                    const nextTime = (frameNo / actualFps) * 1000;
+                    const elapsed = performance.now() - start;
+                    setTimeout(tick, Math.max(0, nextTime - elapsed));
+                } else {
+                    // Keep the final frame until the exact requested duration.
+                    const elapsed = performance.now() - start;
+                    const remaining = Math.max(0, durationMs - elapsed);
+                    setTimeout(stopAtEnd, remaining + 10);
                 }
-                if (gifIndex === 0) { drawGifFrame(gifData.frames[0]); elapsed = gifData.frames[0].delay; }
-                drawOutput();
-                frameNo++;
-                onProgress(10 + Math.min(85, Math.round(frameNo / frameTotal * 85)), `Recording frame ${frameNo}/${frameTotal}...`);
-                if (frameNo >= frameTotal) {
-                    setTimeout(() => { if (!stopped) { stopped = true; try { recorder.stop(); } catch (e) { reject(e); } } }, Math.ceil(1000 / fps));
-                    return;
-                }
-                const nextTarget = frameNo * (1000 / fps);
-                const wait = Math.max(0, nextTarget - (performance.now() - start));
-                setTimeout(tick, Math.max(1, wait));
             };
-            // Give MediaRecorder one rendering tick before starting frame timing.
-            drawGifFrame(gifData.frames[0]);
-            drawOutput();
-            requestAnimationFrame(tick);
+
+            try {
+                recorder.start();
+                renderFrame(gifData.frames[frameIndexes[0]]);
+                requestAnimationFrame(tick);
+            } catch (error) {
+                fail(error);
+            }
         });
+
+        const bitrates = this.getBitratePlan(settings.detail);
+        let lastBlob = null;
+        for (let i = 0; i < bitrates.length; i++) {
+            const bitrate = bitrates[i];
+            onProgress?.(5, `Trying Telegram-safe bitrate ${Math.round(bitrate / 1000)} kbps...`);
+            const blob = await recordOnce(bitrate, i + 1, bitrates.length);
+            lastBlob = blob;
+
+            if (blob.size <= 256 * 1024) {
+                onProgress?.(100, `WEBM READY • ${(blob.size / 1024).toFixed(1)} KB • ${Math.min(3, durationMs / 1000).toFixed(2)}s`);
+                return blob;
+            }
+        }
+
+        throw new Error(`Could not reach Telegram's 256 KB limit. Best output: ${(lastBlob.size / 1024).toFixed(1)} KB. Try Low detail.`);
     }
 }

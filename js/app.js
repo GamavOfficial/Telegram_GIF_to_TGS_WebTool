@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const downloadUrl = URL.createObjectURL(tgsBlob);
             downloadBtn.href = downloadUrl;
+            downloadBtn.download = 'telegram-sticker.tgs'; // Android Chrome .txt தடுப்பதற்கான முக்கிய அட்ரிபியூட்
             downloadBtn.classList.remove('hidden');
 
         } catch (err) {

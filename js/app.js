@@ -31,26 +31,47 @@ $("reset").onclick=()=>location.reload();
 
 async function saveTGS(blob){
   /*
-   * Important:
-   * Use a Blob URL + download attribute. Do NOT use data:text/plain.
-   * The Blob has application/gzip MIME and an exact .tgs filename.
+   * Telegram TGS is a gzipped JSON document. Use Telegram's TGS MIME type
+   * instead of application/gzip; Android file managers can otherwise append
+   * ".gz" to the requested ".tgs" filename.
    */
   if(downloadURL)URL.revokeObjectURL(downloadURL);
-  downloadURL=URL.createObjectURL(new Blob([blob],{type:"application/gzip"}));
+
+  const tgsBlob=new Blob([blob],{type:"application/x-tgsticker"});
+  downloadURL=URL.createObjectURL(tgsBlob);
 
   const a=document.createElement("a");
   a.href=downloadURL;
   a.download="telegram-sticker.tgs";
-  a.type="application/gzip";
   a.rel="noopener";
+  a.style.display="none";
   document.body.appendChild(a);
   a.click();
   a.remove();
 
-  /*
-   * Return the URL too, so the visible button can retry the same exact blob.
-   */
   return downloadURL;
+}
+
+async function verifyTGS(blob){
+  const head=new Uint8Array(await blob.slice(0,2).arrayBuffer());
+  if(head[0]!==0x1f || head[1]!==0x8b)
+    throw Error("Generated output is not a valid GZIP/TGS container.");
+
+  if(!window.DecompressionStream)
+    return;
+
+  const stream=blob.stream().pipeThrough(new DecompressionStream("gzip"));
+  const json=await new Response(stream).text();
+  const data=JSON.parse(json);
+
+  if(!data || data.w!==512 || data.h!==512)
+    throw Error("TGS validation failed: canvas is not 512×512.");
+  if(!Array.isArray(data.layers) || !data.layers.length)
+    throw Error("TGS validation failed: no Lottie layers.");
+  if(data.fr<30 || data.fr>60)
+    throw Error("TGS validation failed: FPS must be 30–60.");
+  if((data.op-data.ip)/data.fr>3.01)
+    throw Error("TGS validation failed: animation exceeds 3 seconds.");
 }
 
 $("build").onclick=async()=>{
@@ -85,6 +106,7 @@ $("build").onclick=async()=>{
 
     status("Creating compressed .TGS…");
     const blob=await TGS.gzip(lottie);
+    await verifyTGS(blob);
     const kb=blob.size/1024;
 
     if(kb>64){

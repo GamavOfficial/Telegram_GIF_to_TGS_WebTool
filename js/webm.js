@@ -1,4 +1,4 @@
-class TgsEncoder { // (இதன் பெயரினை WebmEncoder என்றும் மாற்றிக் கொள்ளலாம்)
+class WebmEncoder {
     static async generateTgs(gifData, settings, onProgress) {
         onProgress(20, 'Preparing video conversion pipeline...');
         await new Promise(r => setTimeout(r, 200));
@@ -74,4 +74,3 @@ class TgsEncoder { // (இதன் பெயரினை WebmEncoder என்�
         });
     }
 }
-

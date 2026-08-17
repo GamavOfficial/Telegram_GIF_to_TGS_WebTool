@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GIF → Telegram TGS Builder</title>
+<style>
+body{margin:0;background:#0b0f16;color:#eef2f7;font-family:system-ui,sans-serif}
+.wrap{max-width:820px;margin:auto;padding:22px}.card{background:#151b24;border:1px solid #293241;border-radius:20px;padding:20px;margin-top:14px}
+h1{margin:0 0 6px;font-size:24px}.muted{color:#9da8b8;font-size:13px}.drop{border:2px dashed #3b4658;border-radius:16px;padding:36px;text-align:center;cursor:pointer;margin-top:18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:12px;padding:12px 16px;background:#7c5cff;color:white;font-weight:700}
+button:disabled{opacity:.45}.preview{max-width:260px;max-height:260px;display:block;margin:16px auto}
+.ok{color:#71e0a3}.warn{color:#ffd166}.err{color:#ff7f8a}a{display:inline-block;margin-top:12px;color:white;background:#238636;padding:12px 16px;border-radius:12px;text-decoration:none;font-weight:700}
+select{background:#0e131b;color:white;border:1px solid #303b4c;border-radius:9px;padding:9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>GIF → Telegram TGS Builder</h1>
+<div class="muted">Experimental raster-GIF → Lottie TGS converter for simple transparent animations.</div>
+
+<div class="card">
+<div id="drop" class="drop">Tap to choose a GIF<br><small>or drag & drop</small>
+<input id="file" type="file" accept=".gif,image/gif" hidden></div>
+<img id="preview" class="preview" hidden>
+
+<div class="row">
+<label>Canvas
+<select id="size"><option value="64" selected>64×64</option><option value="128">128×128</option></select></label>
+<label>FPS
+<select id="fps"><option>20</option><option selected>30</option></select></label>
+<label>Max frames
+<select id="frames"><option selected>60</option><option>45</option><option>30</option></select></label>
+<label>Detail
+<select id="detail"><option value="16">Low</option><option value="24" selected>Medium</option><option value="32">High</option></select></label>
+</div>
+
+<div class="row">
+<button id="convert" disabled>BUILD TGS</button>
+<button id="reset">RESET</button>
+</div>
+<p id="status" class="muted">Select a GIF.</p>
+<div id="result"></div>
+</div>
+
+<div class="card">
+<strong>About TGS</strong>
+<p class="muted">
+Telegram <code>.tgs</code> stickers are gzipped Lottie JSON animations. They are vector-oriented and
+have stricter constraints than GIF/WEBM. This tool uses sampled color blocks to approximate a GIF,
+so best results come from simple, flat-color transparent GIFs.
+</p>
+</div>
+</div>
+
+<script>
+let selected=null;
+const $=id=>document.getElementById(id);
+function msg(t,c=''){ $('status').textContent=t; $('status').className=c||'muted'; }
+
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>pick(e.target.files[0]);
+$('drop').ondragover=e=>{e.preventDefault()};
+$('drop').ondrop=e=>{e.preventDefault();pick(e.dataTransfer.files[0])};
+
+function pick(f){
+  if(!f || !/\.gif$/i.test(f.name)){msg('Please choose a GIF.','err');return}
+  selected=f;
+  $('preview').src=URL.createObjectURL(f);
+  $('preview').hidden=false;
+  $('convert').disabled=false;
+  msg(`Selected: ${f.name}`);
+}
+
+async function decodeFrames(file,maxFrames,size){
+  if(!('ImageDecoder' in window))
+    throw new Error('Use a recent Chrome/Edge browser with ImageDecoder support.');
+
+  const data=await file.arrayBuffer();
+  const dec=new ImageDecoder({data,type:'image/gif'});
+  const count=Math.min(dec.tracks.selectedTrack.frameCount,maxFrames);
+  const canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const frames=[];
+
+  for(let i=0;i<count;i++){
+    const fr=await dec.decode({frameIndex:i});
+    const img=fr.image;
+    ctx.clearRect(0,0,size,size);
+    const scale=Math.min(size/img.displayWidth,size/img.displayHeight);
+    const w=img.displayWidth*scale,h=img.displayHeight*scale;
+    ctx.drawImage(img,(size-w)/2,(size-h)/2,w,h);
+    frames.push(ctx.getImageData(0,0,size,size));
+    img.close();
+  }
+  return frames;
+}
+
+function makeLottie(frames,size,fps,detail){
+  // Lightweight educational vector approximation.
+  // Each sampled cell becomes a rectangle shape.
+  const layers=[];
+  const step=Math.max(1,Math.floor(size/detail));
+
+  frames.forEach((img,fi)=>{
+    for(let y=0;y<size;y+=step){
+      for(let x=0;x<size;x+=step){
+        let rr=0,gg=0,bb=0,aa=0,n=0;
+        for(let yy=y;yy<Math.min(size,y+step);yy++){
+          for(let xx=x;xx<Math.min(size,x+step);xx++){
+            const p=(yy*size+xx)*4;
+            rr+=img.data[p];gg+=img.data[p+1];bb+=img.data[p+2];aa+=img.data[p+3];n++;
+          }
+        }
+        aa/=n;
+        if(aa<40) continue;
+        rr=Math.round(rr/n);gg=Math.round(gg/n);bb=Math.round(bb/n);
+
+        layers.push({
+          ddd:0,ind:layers.length+1,ty:4,nm:`frame${fi}_${x}_${y}`,sr:1,
+          ks:{
+            o:{a:0,k:Math.round(aa/255*100)},
+            r:{a:0,k:0},
+            p:{a:0,k:[x+step/2,size-(y+step/2),0]},
+            a:{a:0,k:[0,0,0]},
+            s:{a:0,k:[step*10,step*10,100]}
+          },
+          ao:0,
+          shapes:[
+            {ty:'rc',d:1,s:{a:0,k:[10,10]},p:{a:0,k:[0,0]},r:{a:0,k:0}},
+            {ty:'fl',c:{a:0,k:[rr/255,gg/255,bb/255,1]},o:{a:0,k:100},r:1}
+          ]
+        });
+      }
+    }
+  });
+
+  return {v:'5.7.4',fr:fps,ip:0,op:frames.length,w:size,h:size,nm:'GIF to TGS',ddd:0,assets:[],layers};
+}
+
+async function gzip(text){
+  if(!('CompressionStream' in window))
+    throw new Error('This browser does not support CompressionStream.');
+  const bytes=new TextEncoder().encode(text);
+  const cs=new CompressionStream('gzip');
+  return await new Response(new Blob([bytes]).stream().pipeThrough(cs)).blob();
+}
+
+$('convert').onclick=async()=>{
+  $('convert').disabled=true;
+  $('result').innerHTML='';
+  try{
+    const size=+$('size').value, fps=+$('fps').value;
+    const maxFrames=+$('frames').value, detail=+$('detail').value;
+    msg('Decoding GIF…');
+    const frames=await decodeFrames(selected,maxFrames,size);
+    msg(`Building ${frames.length} frames…`);
+    const lottie=makeLottie(frames,size,fps,detail);
+    msg('Compressing Lottie JSON…');
+    const blob=await gzip(JSON.stringify(lottie));
+    const url=URL.createObjectURL(blob);
+    const kb=blob.size/1024;
+    $('result').innerHTML=`<div class="${kb<=64?'ok':'warn'}"><b>Generated:</b> ${kb.toFixed(1)} KB</div>
+      <a download="telegram-sticker.tgs" href="${url}">DOWNLOAD .TGS</a>
+      ${kb>64?'<p class="warn">Large file. Reduce canvas, detail or frame count.</p>':''}`;
+    msg('TGS build complete.','ok');
+  }catch(e){msg('Build failed: '+e.message,'err')}
+  finally{$('convert').disabled=false}
+};
+$('reset').onclick=()=>location.reload();
+</script>
+</body>
+</html>

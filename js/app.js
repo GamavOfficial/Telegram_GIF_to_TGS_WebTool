@@ -20,17 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadBtn');
 
     let selectedGif = null;
-            parsedGif = null;
     let parsedGif = null;
 
     // Handle click & drag-drop upload
     if (uploadZone && gifFileInput) {
         if (selectFileBtn) {
-            selectFileBtn.addEventListener('click', () => gifFileInput.click());
+            selectFileBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                gifFileInput.click();
+            });
         }
-        uploadZone.addEventListener('click', (e) => {
-            if (e.target !== selectFileBtn) gifFileInput.click();
-        });
 
         uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -50,9 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         gifFileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                handleFile(e.target.files[0]);
-            }
+            const file = e.target.files && e.target.files[0];
+            if (file) handleFile(file);
         });
     }
 

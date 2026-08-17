@@ -99,8 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const fpsSelect = document.getElementById('fps-select') || document.getElementById('fpsSelect');
+            const detailSelect = document.getElementById('detailSelect');
+            const maxFramesSelect = document.getElementById('maxFramesSelect');
             const settings = {
-                fps: fpsSelect ? fpsSelect.value : 30
+                fps: fpsSelect ? fpsSelect.value : 30,
+                detail: detailSelect ? detailSelect.value : 'medium',
+                maxFrames: maxFramesSelect ? maxFramesSelect.value : 90
             };
 
             if (progressBarContainer) progressBarContainer.classList.remove('hidden');
@@ -108,13 +112,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // Calls WebmEncoder from webm.js
-                const webmBlob = await WebmEncoder.generateWebm(parsedGif, { ...settings, maxFrames: document.getElementById('maxFramesSelect')?.value || 90 }, (progress, message) => {
+                const webmBlob = await WebmEncoder.generateWebm(parsedGif, settings, (progress, message) => {
                     if (progressBar) progressBar.style.width = `${progress}%`;
                     if (statusText) statusText.textContent = message;
                 });
 
+                const validation = await WebmValidator.validate(webmBlob, 3000, 256 * 1024);
+                if (!validation.valid) throw new Error(validation.message);
+
                 if (validationResult) {
-                    validationResult.textContent = 'Validation: Passed (.webm ready)';
+                    validationResult.textContent = `Validation: PASSED • ${(webmBlob.size / 1024).toFixed(1)} KB • ${validation.duration.toFixed(2)}s`;
                     validationResult.style.color = '#4ade80';
                 }
 

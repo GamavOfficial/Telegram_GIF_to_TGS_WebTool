@@ -29,9 +29,11 @@ code{background:#0c1118;padding:2px 5px;border-radius:5px}
 <div class="muted">Fully offline browser version — no ImageDecoder and no external gifuct-js dependency.</div>
 
 <div class="card">
-<div id="drop" class="drop">
-  <b>Tap to choose a GIF</b><br><small>or drag & drop a .gif</small>
-  <input id="file" type="file" accept=".gif,image/gif" hidden>
+<div id="drop" class="drop" role="button" tabindex="0">
+  <label for="file" style="display:block;cursor:pointer">
+    <b>📁 TAP TO CHOOSE A GIF</b><br><small>Gallery / Files will open • or drag & drop a .gif</small>
+  </label>
+  <input id="file" type="file" accept="image/gif,.gif" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
 </div>
 <img id="preview" class="preview" hidden>
 
@@ -394,10 +396,31 @@ async function gzipObject(obj){
    UI
    ============================================================ */
 
-$('drop').onclick=()=>$('file').click();
-$('file').onchange=e=>choose(e.target.files[0]);
-$('drop').ondragover=e=>e.preventDefault();
-$('drop').ondrop=e=>{e.preventDefault();choose(e.dataTransfer.files[0])};
+// IMPORTANT: the visible control is a real <label for="file">.
+// This avoids Android Chrome blocking programmatic file-picker clicks.
+$('file').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  if (f) choose(f);
+});
+$('drop').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    $('file').click();
+  }
+});
+$('drop').addEventListener('dragover', e => {
+  e.preventDefault();
+  $('drop').style.borderColor='#7c5cff';
+});
+$('drop').addEventListener('dragleave', () => {
+  $('drop').style.borderColor='#3b4658';
+});
+$('drop').addEventListener('drop', e => {
+  e.preventDefault();
+  $('drop').style.borderColor='#3b4658';
+  const f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) choose(f);
+});
 
 function choose(file){
   if(!file||!/\.gif$/i.test(file.name)){

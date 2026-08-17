@@ -20,7 +20,7 @@
                 <h2>1. Select GIF</h2>
                 <div class="upload-zone" id="uploadZone">
                     <input type="file" id="gifFileInput" accept=".gif,image/gif" hidden>
-                    <button type="button" class="btn primary-btn" id="selectFileBtn">TAP TO CHOOSE GIF</button>
+                    <label class="btn primary-btn" id="selectFileBtn" for="gifFileInput" role="button" tabindex="0">TAP TO CHOOSE GIF</label>
                     <p class="drag-text">or drag & drop animated GIF here</p>
                 </div>
 
@@ -48,17 +48,17 @@
                 <div class="settings-group">
                     <label for="fpsSelect">FPS:</label>
                     <select id="fpsSelect">
-                        <option value="30">30 FPS</option>
-                        <option value="60" selected>60 FPS (Telegram Recommended)</option>
+                        <option value="30" selected>30 FPS (Telegram limit)</option>
+                        <option value="24">24 FPS</option>
                     </select>
                 </div>
 
                 <div class="settings-group">
                     <label for="maxFramesSelect">Max Frames:</label>
                     <select id="maxFramesSelect">
-                        <option value="60">60 Frames</option>
-                        <option value="120" selected>120 Frames (~2s at 60fps)</option>
-                        <option value="180">180 Frames (~3s max)</option>
+                        <option value="30">30 Frames (1s)</option>
+                        <option value="60">60 Frames (2s)</option>
+                        <option value="90" selected>90 Frames (3s at 30fps)</option>
                     </select>
                 </div>
 

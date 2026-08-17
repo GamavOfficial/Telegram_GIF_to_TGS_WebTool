@@ -1,57 +1,128 @@
-(function(){
-"use strict";
-const $=id=>document.getElementById(id);let file=null,url=null;
-function msg(t,c=""){$("status").textContent=t;$("status").className="status "+c}
-const picker=$("gifFile");
-picker.addEventListener("change",e=>{
- const f=e.target && e.target.files ? e.target.files[0] : null;
- if(!f){msg("No GIF selected.","warn");return}
- if(f.type && f.type!=="image/gif" && !/\\.gif$/i.test(f.name)){
-   picker.value=""; msg("Please choose a GIF file.","err"); return;
- }
- if(!/\\.gif$/i.test(f.name)){
-   picker.value=""; msg("Please choose a file ending in .gif.","err"); return;
- }
- file=f;
- if(url)URL.revokeObjectURL(url);
- url=URL.createObjectURL(f);
+document.addEventListener('DOMContentLoaded', () => {
+    const gifFileInput = document.getElementById('gifFileInput');
+    const selectFileBtn = document.getElementById('selectFileBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const infoName = document.getElementById('infoName');
+    const infoSize = document.getElementById('infoSize');
+    const infoRes = document.getElementById('infoRes');
+    const infoFrames = document.getElementById('infoFrames');
+    const infoDuration = document.getElementById('infoDuration');
+    const gifPreviewImg = document.getElementById('gifPreviewImg');
+    const placeholderText = document.querySelector('.placeholder-text');
+    const buildBtn = document.getElementById('buildBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const statusText = document.getElementById('statusText');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const progressBar = document.getElementById('progressBar');
+    const validationResult = document.getElementById('validationResult');
+    const downloadBtn = document.getElementById('downloadBtn');
 
- const img=$("preview");
- img.onload=()=>{
-   $("previewWrap").classList.remove("hidden");
-   $("build").disabled=false;
-   $("fileInfo").textContent=f.name+" • "+(f.size/1024).toFixed(1)+" KB • "+(f.type||"image/gif");
-   msg("GIF selected successfully. Preview is ready.","ok");
- };
- img.onerror=()=>{
-   $("previewWrap").classList.add("hidden");
-   $("build").disabled=false;
-   $("fileInfo").textContent=f.name+" • "+(f.size/1024).toFixed(1)+" KB • GIF";
-   msg("GIF selected, but the browser could not render the preview. You can still build it.","warn");
- };
- img.src=url;
-});
+    let currentFile = null;
+    let parsedGifData = null;
 
-$("gifFile").addEventListener("click",()=>{
-  msg("Opening Android file picker…");
+    selectFileBtn.addEventListener('click', () => {
+        gifFileInput.click();
+    });
+
+    gifFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'image/gif' && !file.name.endsWith('.gif')) {
+            alert('Please select a valid animated GIF file.');
+            return;
+        }
+
+        currentFile = file;
+        statusText.textContent = 'Reading GIF...';
+
+        try {
+            parsedGifData = await GifParser.parse(file);
+            
+            // Display File Info
+            infoName.textContent = file.name;
+            infoSize.textContent = Utils.formatBytes(file.size);
+            infoRes.textContent = `${parsedGifData.width} × ${parsedGifData.height}`;
+            infoFrames.textContent = parsedGifData.frameCount;
+            infoDuration.textContent = `${parsedGifData.duration} seconds`;
+            fileInfo.classList.remove('hidden');
+
+            // Display Preview
+            gifPreviewImg.src = parsedGifData.url;
+            gifPreviewImg.classList.remove('hidden');
+            placeholderText.classList.add('hidden');
+
+            buildBtn.removeAttribute('disabled');
+            statusText.textContent = 'GIF loaded successfully. Ready to build TGS.';
+            validationResult.textContent = 'Validation: Pending';
+            validationResult.className = 'validation-box';
+            downloadBtn.classList.add('hidden');
+        } catch (err) {
+            statusText.textContent = 'Error: ' + err.message;
+            alert(err.message);
+        }
+    });
+
+    buildBtn.addEventListener('click', async () => {
+        if (!currentFile || !parsedGifData) return;
+
+        buildBtn.setAttribute('disabled', 'true');
+        progressBarContainer.classList.remove('hidden');
+        progressBar.style.width = '10%';
+
+        const updateProgress = (pct, msg) => {
+            progressBar.style.width = pct + '%';
+            statusText.textContent = msg;
+        };
+
+        try {
+            updateProgress(20, 'Initializing conversion pipeline...');
+            const settings = {
+                detail: document.getElementById('detailSelect').value,
+                fps: document.getElementById('fpsSelect').value,
+                maxFrames: document.getElementById('maxFramesSelect').value
+            };
+
+            const tgsBlob = await TgsEncoder.generateTgs(parsedGifData, settings, updateProgress);
+            
+            updateProgress(95, 'Validating TGS...');
+            const validation = await TgsValidator.validate(tgsBlob);
+
+            if (!validation.valid) {
+                throw new Error(validation.message);
+            }
+
+            updateProgress(100, 'TGS READY');
+            validationResult.textContent = `Validation: ${validation.message} (${Utils.formatBytes(tgsBlob.size)})`;
+            validationResult.className = 'validation-box passed';
+
+            const downloadUrl = URL.createObjectURL(tgsBlob);
+            downloadBtn.href = downloadUrl;
+            downloadBtn.classList.remove('hidden');
+
+        } catch (err) {
+            statusText.textContent = 'Failed: ' + err.message;
+            validationResult.textContent = `Validation: FAILED (${err.message})`;
+            validationResult.className = 'validation-box failed';
+            buildBtn.removeAttribute('disabled');
+            progressBarContainer.classList.add('hidden');
+        }
+    });
+
+    resetBtn.addEventListener('click', () => {
+        currentFile = null;
+        parsedGifData = null;
+        gifFileInput.value = '';
+        fileInfo.classList.add('hidden');
+        gifPreviewImg.src = '';
+        gifPreviewImg.classList.add('hidden');
+        placeholderText.classList.remove('hidden');
+        buildBtn.setAttribute('disabled', 'true');
+        statusText.textContent = 'Ready for input.';
+        progressBarContainer.classList.add('hidden');
+        progressBar.style.width = '0%';
+        validationResult.textContent = 'Validation: Pending';
+        validationResult.className = 'validation-box';
+        downloadBtn.classList.add('hidden');
+    });
 });
-$("reset").onclick=()=>location.reload();
-$("build").onclick=async()=>{
- if(!file)return;$("build").disabled=true;$("result").innerHTML='<div class="progress"><i id="bar"></i></div>';
- try{
-  const size=+$("size").value,fps=60,max=+$("frames").value,detail=+$("detail").value;
-  msg("Reading GIF…");const gif=GIFParser.parse(await file.arrayBuffer());
-  msg("Sampling GIF frames…");
-  const frames=TGS.sample(gif,max,size,fps,p=>$("bar").style.width=p+"%");
-  msg("Building compact Lottie vector animation…","ok");
-  const lottie=TGS.build(frames,size,fps,detail,p=>$("bar").style.width=(55+p*.35)+"%");
-  msg("Compressing and validating TGS…");
-  const blob=await TGS.gzip(lottie);await TGS.inspect(blob);
-  const tgs=new Blob([blob],{type:"application/x-tgsticker"}),u=URL.createObjectURL(tgs);
-  const a=document.createElement("a");a.href=u;a.download="telegram-sticker.tgs";a.style.display="none";document.body.appendChild(a);a.click();a.remove();
-  $("result").innerHTML='<div class="ok"><b>Valid TGS generated:</b> '+(blob.size/1024).toFixed(1)+' KB</div><a class="download" href="'+u+'" download="telegram-sticker.tgs">DOWNLOAD .TGS AGAIN</a>';
-  msg("TGS created and validated successfully.","ok");
- }catch(e){console.error(e);$("result").innerHTML="";msg("Build failed: "+e.message,"err")}
- finally{$("build").disabled=false}
-};
-})();

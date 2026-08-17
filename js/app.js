@@ -1,129 +1,127 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const gifFileInput = document.getElementById('gifFileInput');
-    const selectFileBtn = document.getElementById('selectFileBtn');
-    const fileInfo = document.getElementById('fileInfo');
-    const infoName = document.getElementById('infoName');
-    const infoSize = document.getElementById('infoSize');
-    const infoRes = document.getElementById('infoRes');
-    const infoFrames = document.getElementById('infoFrames');
-    const infoDuration = document.getElementById('infoDuration');
-    const gifPreviewImg = document.getElementById('gifPreviewImg');
-    const placeholderText = document.querySelector('.placeholder-text');
-    const buildBtn = document.getElementById('buildBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const statusText = document.getElementById('statusText');
-    const progressBarContainer = document.getElementById('progressBarContainer');
-    const progressBar = document.getElementById('progressBar');
-    const validationResult = document.getElementById('validationResult');
-    const downloadBtn = document.getElementById('downloadBtn');
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const settingsSection = document.getElementById('settings-section');
+    const buildBtn = document.getElementById('build-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const progressSection = document.getElementById('progress-section');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const resultSection = document.getElementById('result-section');
+    const downloadBtn = document.getElementById('download-btn');
 
-    let currentFile = null;
-    let parsedGifData = null;
+    let selectedGif = null;
 
-    selectFileBtn.addEventListener('click', () => {
-        gifFileInput.click();
-    });
+    // Handle drag and drop / click to upload
+    if (dropZone && fileInput) {
+        dropZone.addEventListener('click', () => fileInput.click());
 
-    gifFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-primary');
+        });
 
-        if (file.type !== 'image/gif' && !file.name.endsWith('.gif')) {
-            alert('Please select a valid animated GIF file.');
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-primary');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-primary');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+    }
+
+    function handleFile(file) {
+        if (!file.type.includes('gif')) {
+            alert('தயவுசெய்து ஒரு சரியான GIF ஃபைலை மட்டும் தேர்ந்தெடுக்கவும்!');
             return;
         }
 
-        currentFile = file;
-        statusText.textContent = 'Reading GIF...';
-
-        try {
-            parsedGifData = await GifParser.parse(file);
-            
-            // Display File Info
-            infoName.textContent = file.name;
-            infoSize.textContent = Utils.formatBytes(file.size);
-            infoRes.textContent = `${parsedGifData.width} × ${parsedGifData.height}`;
-            infoFrames.textContent = parsedGifData.frameCount;
-            infoDuration.textContent = `${parsedGifData.duration} seconds`;
-            fileInfo.classList.remove('hidden');
-
-            // Display Preview
-            gifPreviewImg.src = parsedGifData.url;
-            gifPreviewImg.classList.remove('hidden');
-            placeholderText.classList.add('hidden');
-
-            buildBtn.removeAttribute('disabled');
-            statusText.textContent = 'GIF loaded successfully. Ready to build TGS.';
-            validationResult.textContent = 'Validation: Pending';
-            validationResult.className = 'validation-box';
-            downloadBtn.classList.add('hidden');
-        } catch (err) {
-            statusText.textContent = 'Error: ' + err.message;
-            alert(err.message);
-        }
-    });
-
-    buildBtn.addEventListener('click', async () => {
-        if (!currentFile || !parsedGifData) return;
-
-        buildBtn.setAttribute('disabled', 'true');
-        progressBarContainer.classList.remove('hidden');
-        progressBar.style.width = '10%';
-
-        const updateProgress = (pct, msg) => {
-            progressBar.style.width = pct + '%';
-            statusText.textContent = msg;
-        };
-
-        try {
-            updateProgress(20, 'Initializing conversion pipeline...');
-            const settings = {
-                detail: document.getElementById('detailSelect').value,
-                fps: document.getElementById('fpsSelect').value,
-                maxFrames: document.getElementById('maxFramesSelect').value
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                selectedGif = {
+                    url: e.target.result,
+                    width: img.width,
+                    height: img.height,
+                    name: file.name
+                };
+                // Show settings section
+                if (settingsSection) settingsSection.classList.remove('hidden');
+                dropZone.innerHTML = `<p class="text-green-400 font-semibold">নির্বெடுக்கப்பட்ட ஃபைல்: ${file.name}</p>`;
             };
+        };
+        reader.readAsDataURL(file);
+    }
 
-            const tgsBlob = await TgsEncoder.generateTgs(parsedGifData, settings, updateProgress);
-            
-            updateProgress(95, 'Validating TGS...');
-            const validation = await TgsValidator.validate(tgsBlob);
-
-            if (!validation.valid) {
-                throw new Error(validation.message);
+    // Build Button Action
+    if (buildBtn) {
+        buildBtn.addEventListener('click', async () => {
+            if (!selectedGif) {
+                alert('முதலில் ஒரு GIF ஃபைலை அப்லோட் செய்யவும்!');
+                return;
             }
 
-            updateProgress(100, 'TGS READY');
-            validationResult.textContent = `Validation: ${validation.message} (${Utils.formatBytes(tgsBlob.size)})`;
-            validationResult.className = 'validation-box passed';
+            const fpsSelect = document.getElementById('fps-select');
+            const settings = {
+                fps: fpsSelect ? fpsSelect.value : 30
+            };
 
-            const downloadUrl = URL.createObjectURL(tgsBlob);
-            downloadBtn.href = downloadUrl;
-            downloadBtn.download = 'telegram-sticker.tgs'; // Android Chrome .txt தடுப்பதற்கான முக்கிய அட்ரிபியூட்
-            downloadBtn.classList.remove('hidden');
+            settingsSection.classList.add('hidden');
+            progressSection.classList.remove('hidden');
 
-        } catch (err) {
-            statusText.textContent = 'Failed: ' + err.message;
-            validationResult.textContent = `Validation: FAILED (${err.message})`;
-            validationResult.className = 'validation-box failed';
-            buildBtn.removeAttribute('disabled');
-            progressBarContainer.classList.add('hidden');
-        }
-    });
+            try {
+                const webmBlob = await TgsEncoder.generateTgs(selectedGif, settings, (progress, message) => {
+                    if (progressBar) progressBar.style.width = `${progress}%`;
+                    if (progressText) progressText.textContent = message;
+                });
 
-    resetBtn.addEventListener('click', () => {
-        currentFile = null;
-        parsedGifData = null;
-        gifFileInput.value = '';
-        fileInfo.classList.add('hidden');
-        gifPreviewImg.src = '';
-        gifPreviewImg.classList.add('hidden');
-        placeholderText.classList.remove('hidden');
-        buildBtn.setAttribute('disabled', 'true');
-        statusText.textContent = 'Ready for input.';
-        progressBarContainer.classList.add('hidden');
-        progressBar.style.width = '0%';
-        validationResult.textContent = 'Validation: Pending';
-        validationResult.className = 'validation-box';
-        downloadBtn.classList.add('hidden');
-    });
+                progressSection.classList.add('hidden');
+                resultSection.classList.remove('hidden');
+
+                // Generate download link for WebM
+                const downloadUrl = URL.createObjectURL(webmBlob);
+                if (downloadBtn) {
+                    downloadBtn.href = downloadUrl;
+                    downloadBtn.download = 'telegram-sticker.webm';
+                    downloadBtn.classList.remove('hidden');
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert('பிழை ஏற்பட்டுள்ளது: ' + err.message);
+                progressSection.classList.add('hidden');
+                settingsSection.classList.remove('hidden');
+            }
+        });
+    }
+
+    // Reset Button Action
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            selectedGif = null;
+            if (fileInput) fileInput.value = '';
+            if (settingsSection) settingsSection.classList.add('hidden');
+            if (progressSection) progressSection.classList.add('hidden');
+            if (resultSection) resultSection.classList.add('hidden');
+            if (dropZone) {
+                dropZone.innerHTML = `
+                    <span class="text-blue-400 font-bold block mb-2">TAP TO CHOOSE GIF</span>
+                    <span class="text-gray-400 text-sm">or drag & drop animated GIF here</span>
+                `;
+            }
+        });
+    }
 });
+

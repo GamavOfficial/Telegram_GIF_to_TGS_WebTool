@@ -3,25 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GIF → Telegram TGS Builder</title>
+<title>GIF → TGS v2</title>
 <style>
-body{margin:0;background:#0b0f16;color:#eef2f7;font-family:system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#0b0f16;color:#eef2f7;font-family:system-ui,sans-serif}
 .wrap{max-width:820px;margin:auto;padding:22px}.card{background:#151b24;border:1px solid #293241;border-radius:20px;padding:20px;margin-top:14px}
-h1{margin:0 0 6px;font-size:24px}.muted{color:#9da8b8;font-size:13px}.drop{border:2px dashed #3b4658;border-radius:16px;padding:36px;text-align:center;cursor:pointer;margin-top:18px}
-.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:12px;padding:12px 16px;background:#7c5cff;color:white;font-weight:700}
+h1{margin:0 0 6px;font-size:24px}.muted{color:#9da8b8;font-size:13px}
+.drop{border:2px dashed #3b4658;border-radius:16px;padding:36px;text-align:center;cursor:pointer;margin-top:18px}
+.drop:hover{border-color:#7c5cff}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+button{border:0;border-radius:12px;padding:12px 16px;background:#7c5cff;color:#fff;font-weight:700;cursor:pointer}
 button:disabled{opacity:.45}.preview{max-width:260px;max-height:260px;display:block;margin:16px auto}
-.ok{color:#71e0a3}.warn{color:#ffd166}.err{color:#ff7f8a}a{display:inline-block;margin-top:12px;color:white;background:#238636;padding:12px 16px;border-radius:12px;text-decoration:none;font-weight:700}
-select{background:#0e131b;color:white;border:1px solid #303b4c;border-radius:9px;padding:9px}
+select{background:#0e131b;color:#fff;border:1px solid #303b4c;border-radius:9px;padding:9px}
+.ok{color:#71e0a3}.warn{color:#ffd166}.err{color:#ff7f8a}
+a.download{display:inline-block;margin-top:12px;color:#fff;background:#238636;padding:12px 16px;border-radius:12px;text-decoration:none;font-weight:700}
+code{background:#0c1118;padding:2px 5px;border-radius:5px}
 </style>
 </head>
 <body>
 <div class="wrap">
-<h1>GIF → Telegram TGS Builder</h1>
-<div class="muted">Experimental raster-GIF → Lottie TGS converter for simple transparent animations.</div>
+<h1>GIF → Telegram TGS v2</h1>
+<div class="muted">Robust GIF frame decoder + Lottie JSON + GZIP .tgs output</div>
 
 <div class="card">
-<div id="drop" class="drop">Tap to choose a GIF<br><small>or drag & drop</small>
-<input id="file" type="file" accept=".gif,image/gif" hidden></div>
+<div id="drop" class="drop">
+  <b>Tap to choose a GIF</b><br><small>or drag & drop a .gif</small>
+  <input id="file" type="file" accept=".gif,image/gif" hidden>
+</div>
 <img id="preview" class="preview" hidden>
 
 <div class="row">
@@ -30,9 +36,9 @@ select{background:#0e131b;color:white;border:1px solid #303b4c;border-radius:9px
 <label>FPS
 <select id="fps"><option>20</option><option selected>30</option></select></label>
 <label>Max frames
-<select id="frames"><option selected>60</option><option>45</option><option>30</option></select></label>
+<select id="frames"><option>30</option><option selected>45</option><option>60</option></select></label>
 <label>Detail
-<select id="detail"><option value="16">Low</option><option value="24" selected>Medium</option><option value="32">High</option></select></label>
+<select id="detail"><option value="8">Low</option><option value="12" selected>Medium</option><option value="16">High</option></select></label>
 </div>
 
 <div class="row">
@@ -44,130 +50,185 @@ select{background:#0e131b;color:white;border:1px solid #303b4c;border-radius:9px
 </div>
 
 <div class="card">
-<strong>About TGS</strong>
+<strong>Why this version?</strong>
 <p class="muted">
-Telegram <code>.tgs</code> stickers are gzipped Lottie JSON animations. They are vector-oriented and
-have stricter constraints than GIF/WEBM. This tool uses sampled color blocks to approximate a GIF,
-so best results come from simple, flat-color transparent GIFs.
+This version does <b>not</b> use <code>ImageDecoder.tracks.selectedTrack.frameCount</code>,
+which caused the <code>frameCount of null</code> error shown in your screenshot.
+It uses the GIF frame parser <code>gifuct-js</code> instead.
 </p>
+<p class="muted">The GIF is processed locally in the browser. The generated TGS is an
+approximate raster-to-vector Lottie conversion; simple transparent emoji/cartoon GIFs work best.</p>
 </div>
 </div>
 
+<script src="https://unpkg.com/gifuct-js@2.1.2/dist/gifuct-js.min.js"></script>
 <script>
-let selected=null;
-const $=id=>document.getElementById(id);
-function msg(t,c=''){ $('status').textContent=t; $('status').className=c||'muted'; }
+const $ = id => document.getElementById(id);
+let selected = null;
 
-$('drop').onclick=()=>$('file').click();
-$('file').onchange=e=>pick(e.target.files[0]);
-$('drop').ondragover=e=>{e.preventDefault()};
-$('drop').ondrop=e=>{e.preventDefault();pick(e.dataTransfer.files[0])};
-
-function pick(f){
-  if(!f || !/\.gif$/i.test(f.name)){msg('Please choose a GIF.','err');return}
-  selected=f;
-  $('preview').src=URL.createObjectURL(f);
-  $('preview').hidden=false;
-  $('convert').disabled=false;
-  msg(`Selected: ${f.name}`);
+function status(text, cls='muted'){
+  $('status').textContent = text;
+  $('status').className = cls;
 }
 
-async function decodeFrames(file,maxFrames,size){
-  if(!('ImageDecoder' in window))
-    throw new Error('Use a recent Chrome/Edge browser with ImageDecoder support.');
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => choose(e.target.files[0]);
+$('drop').ondragover = e => e.preventDefault();
+$('drop').ondrop = e => { e.preventDefault(); choose(e.dataTransfer.files[0]); };
 
-  const data=await file.arrayBuffer();
-  const dec=new ImageDecoder({data,type:'image/gif'});
-  const count=Math.min(dec.tracks.selectedTrack.frameCount,maxFrames);
-  const canvas=document.createElement('canvas');
-  canvas.width=size;canvas.height=size;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  const frames=[];
+function choose(file){
+  if(!file || !/\.gif$/i.test(file.name)){
+    status('Please select a .gif file.','err'); return;
+  }
+  selected = file;
+  $('preview').src = URL.createObjectURL(file);
+  $('preview').hidden = false;
+  $('convert').disabled = false;
+  status('GIF selected: ' + file.name);
+}
 
-  for(let i=0;i<count;i++){
-    const fr=await dec.decode({frameIndex:i});
-    const img=fr.image;
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+function renderGIFFrames(arrayBuffer, maxFrames, size, fps){
+  const parsed = gifuct.parseGIF(arrayBuffer);
+  const raw = gifuct.decompressFrames(parsed, true);
+  if(!raw.length) throw new Error('No GIF frames found.');
+
+  // GIF frame delays are in hundredths of a second.
+  const totalDuration = raw.reduce((s,f)=>s + Math.max(1,(f.delay||10))*10,0);
+  const wanted = Math.min(maxFrames, Math.max(1, Math.round(totalDuration/1000*fps)));
+  const stepTime = totalDuration / wanted;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  const frames = [];
+
+  // Build a full composited GIF canvas, honoring frame disposal approximately.
+  const full = document.createElement('canvas');
+  full.width = parsed.lsd.width;
+  full.height = parsed.lsd.height;
+  const fctx = full.getContext('2d', {willReadFrequently:true});
+  fctx.clearRect(0,0,full.width,full.height);
+
+  let cumulative = 0, index = 0;
+  for(let sample=0; sample<wanted; sample++){
+    const target = sample * stepTime;
+    while(index < raw.length && cumulative <= target){
+      const fr = raw[index];
+      const imageData = new ImageData(
+        new Uint8ClampedArray(fr.patch),
+        fr.dims.width,
+        fr.dims.height
+      );
+      fctx.putImageData(imageData, fr.dims.left, fr.dims.top);
+      cumulative += Math.max(1,(fr.delay||10))*10;
+      index++;
+    }
+
     ctx.clearRect(0,0,size,size);
-    const scale=Math.min(size/img.displayWidth,size/img.displayHeight);
-    const w=img.displayWidth*scale,h=img.displayHeight*scale;
-    ctx.drawImage(img,(size-w)/2,(size-h)/2,w,h);
+    const scale = Math.min(size/full.width, size/full.height);
+    const w = full.width*scale, h = full.height*scale;
+    ctx.drawImage(full,(size-w)/2,(size-h)/2,w,h);
     frames.push(ctx.getImageData(0,0,size,size));
-    img.close();
   }
   return frames;
 }
 
-function makeLottie(frames,size,fps,detail){
-  // Lightweight educational vector approximation.
-  // Each sampled cell becomes a rectangle shape.
+function buildLottie(frames,size,fps,detail){
+  // Use a modest grid. Each visible cell is one Lottie rectangle.
+  // One layer per cell, animated opacity per frame.
+  const cell = Math.max(1, Math.ceil(size/detail));
+  const cells = [];
+  for(let y=0;y<size;y+=cell)
+    for(let x=0;x<size;x+=cell)
+      cells.push({x,y});
+
   const layers=[];
-  const step=Math.max(1,Math.floor(size/detail));
-
-  frames.forEach((img,fi)=>{
-    for(let y=0;y<size;y+=step){
-      for(let x=0;x<size;x+=step){
-        let rr=0,gg=0,bb=0,aa=0,n=0;
-        for(let yy=y;yy<Math.min(size,y+step);yy++){
-          for(let xx=x;xx<Math.min(size,x+step);xx++){
-            const p=(yy*size+xx)*4;
-            rr+=img.data[p];gg+=img.data[p+1];bb+=img.data[p+2];aa+=img.data[p+3];n++;
-          }
-        }
-        aa/=n;
-        if(aa<40) continue;
-        rr=Math.round(rr/n);gg=Math.round(gg/n);bb=Math.round(bb/n);
-
-        layers.push({
-          ddd:0,ind:layers.length+1,ty:4,nm:`frame${fi}_${x}_${y}`,sr:1,
-          ks:{
-            o:{a:0,k:Math.round(aa/255*100)},
-            r:{a:0,k:0},
-            p:{a:0,k:[x+step/2,size-(y+step/2),0]},
-            a:{a:0,k:[0,0,0]},
-            s:{a:0,k:[step*10,step*10,100]}
-          },
-          ao:0,
-          shapes:[
-            {ty:'rc',d:1,s:{a:0,k:[10,10]},p:{a:0,k:[0,0]},r:{a:0,k:0}},
-            {ty:'fl',c:{a:0,k:[rr/255,gg/255,bb/255,1]},o:{a:0,k:100},r:1}
-          ]
-        });
-      }
+  cells.forEach((c, ci)=>{
+    const opacity = [];
+    const color = [];
+    for(let fi=0;fi<frames.length;fi++){
+      const img=frames[fi];
+      const cx=Math.min(size-1,c.x+Math.floor(cell/2));
+      const cy=Math.min(size-1,c.y+Math.floor(cell/2));
+      const p=(cy*size+cx)*4;
+      const a=img.data[p+3]/255;
+      opacity.push({t:fi,s:[Math.round(a*100)]});
+      color.push([img.data[p]/255,img.data[p+1]/255,img.data[p+2]/255,a]);
     }
+
+    const last=color[color.length-1]||[1,1,1,0];
+    layers.push({
+      ddd:0, ind:ci+1, ty:4, nm:'cell_'+ci, sr:1,
+      ip:0, op:frames.length, st:0, bm:0,
+      ks:{
+        o:{a:1,k:opacity},
+        r:{a:0,k:0},
+        p:{a:0,k:[c.x+cell/2,size-(c.y+cell/2),0]},
+        a:{a:0,k:[0,0,0]},
+        s:{a:0,k:[cell*10,cell*10,100]}
+      },
+      shapes:[
+        {ty:'rc',d:1,s:{a:0,k:[10,10]},p:{a:0,k:[0,0]},r:{a:0,k:0}},
+        {ty:'fl',c:{a:0,k:last},o:{a:0,k:100},r:1}
+      ]
+    });
   });
 
-  return {v:'5.7.4',fr:fps,ip:0,op:frames.length,w:size,h:size,nm:'GIF to TGS',ddd:0,assets:[],layers};
+  return {
+    v:'5.7.4', fr:fps, ip:0, op:frames.length,
+    w:size, h:size, nm:'GIF to TGS', ddd:0,
+    assets:[], layers:layers
+  };
 }
 
-async function gzip(text){
+async function gzipJSON(obj){
   if(!('CompressionStream' in window))
-    throw new Error('This browser does not support CompressionStream.');
-  const bytes=new TextEncoder().encode(text);
-  const cs=new CompressionStream('gzip');
-  return await new Response(new Blob([bytes]).stream().pipeThrough(cs)).blob();
+    throw new Error('CompressionStream is not supported. Use current Chrome.');
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  const cs = new CompressionStream('gzip');
+  const stream = new Blob([bytes]).stream().pipeThrough(cs);
+  return await new Response(stream).blob();
 }
 
-$('convert').onclick=async()=>{
+$('convert').onclick = async ()=>{
+  if(!selected) return;
   $('convert').disabled=true;
   $('result').innerHTML='';
   try{
-    const size=+$('size').value, fps=+$('fps').value;
-    const maxFrames=+$('frames').value, detail=+$('detail').value;
-    msg('Decoding GIF…');
-    const frames=await decodeFrames(selected,maxFrames,size);
-    msg(`Building ${frames.length} frames…`);
-    const lottie=makeLottie(frames,size,fps,detail);
-    msg('Compressing Lottie JSON…');
-    const blob=await gzip(JSON.stringify(lottie));
+    const size=+$('size').value;
+    const fps=+$('fps').value;
+    const maxFrames=+$('frames').value;
+    const detail=+$('detail').value;
+
+    status('Reading GIF…');
+    const buf=await selected.arrayBuffer();
+
+    status('Decoding GIF frames…');
+    const frames=renderGIFFrames(buf,maxFrames,size,fps);
+
+    status('Creating Lottie animation…');
+    const lottie=buildLottie(frames,size,fps,detail);
+
+    status('Compressing to TGS…');
+    const blob=await gzipJSON(lottie);
     const url=URL.createObjectURL(blob);
     const kb=blob.size/1024;
-    $('result').innerHTML=`<div class="${kb<=64?'ok':'warn'}"><b>Generated:</b> ${kb.toFixed(1)} KB</div>
-      <a download="telegram-sticker.tgs" href="${url}">DOWNLOAD .TGS</a>
-      ${kb>64?'<p class="warn">Large file. Reduce canvas, detail or frame count.</p>':''}`;
-    msg('TGS build complete.','ok');
-  }catch(e){msg('Build failed: '+e.message,'err')}
-  finally{$('convert').disabled=false}
+
+    $('result').innerHTML=
+      `<div class="${kb<=64?'ok':'warn'}"><b>Generated TGS:</b> ${kb.toFixed(1)} KB</div>`+
+      `<a class="download" download="telegram-sticker.tgs" href="${url}">DOWNLOAD .TGS</a>`+
+      (kb>64?'<p class="warn">File is large. Reduce canvas/detail/frame count.</p>':'');
+    status('TGS created successfully.','ok');
+  }catch(err){
+    console.error(err);
+    status('Build failed: '+err.message,'err');
+  }finally{
+    $('convert').disabled=false;
+  }
 };
+
 $('reset').onclick=()=>location.reload();
 </script>
 </body>

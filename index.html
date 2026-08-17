@@ -37,11 +37,12 @@
 
 <section class="card info">
 <b>Input support</b>
-<p>GIF files are accepted through the browser's native file input. No custom JavaScript click is used for the picker.</p>
-<p>This tool does not upload the GIF to a server. Conversion happens in the browser.</p>
-<p><b>TGS:</b> The converter samples the GIF and creates a gzipped Lottie vector animation. Simple transparent emoji/cartoon GIFs work best.</p>
+<p>GIF files are accepted through the browser's native file input. Conversion happens locally in the browser.</p>
+<p><b>TGS output:</b> gzipped Lottie JSON with a real <code>.tgs</code> filename. The download code does not use a text/data URL.</p>
+<p><b>Telegram limits:</b> TGS stickers are intended for 512×512, vector-only Lottie animation, up to 3 seconds and up to 60 FPS; this tool automatically uses the selected canvas and frame limits and warns when the generated file is above 64 KB.</p>
 </section>
 </main>
+
 <script src="js/gif-parser.js"></script>
 <script src="js/tgs.js"></script>
 <script src="js/app.js"></script>
